@@ -1,3 +1,5 @@
+use std::fs;
+
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 
 fn process_input() -> Vec<String> {
@@ -5,41 +7,54 @@ fn process_input() -> Vec<String> {
     let rust_lang: Language = tree_sitter_rust::language();
     parser.set_language(rust_lang).unwrap();
 
-    let code = r#"
-            fn add_two(a: i32, b: i32) -> i32 {
-                a + b
-            }
+    let mut code = r#"
+use theme::ThemeRegistry;
+use util::http::HttpClient;
+use util::{paths, ResultExt, StaffMode};
 
-            fn add_three(a: i32, b: i32, c: i32) -> i32 {
-                a + b + c
-            }
+/// This is a comment
+const SERVER_PATH: &'static str =
+    /// This is another comment
+    "node_modules/vscode-json-languageserver/bin/vscode-json-languageserver";
+
+fn server_binary_arguments(server_path: &Path) -> Vec<OsString> {
+    vec![server_path.into(), "--stdio".into()]
+}
+
+pub struct JsonLspAdapter {
+    node: Arc<NodeRuntime>,
+    languages: Arc<LanguageRegistry>,
+    themes: Arc<ThemeRegistry>,
+}
         "#;
 
     let tree = parser.parse(&code, None).unwrap();
+    let query_string = fs::read_to_string("./src/language/rust/highlights.scm")
+        .expect("Failed to read the highlight.scm file");
 
-    let query_string = "(function_item) @function";
     let query = Query::new(rust_lang, &query_string).unwrap();
 
     let mut query_cursor = QueryCursor::new();
-    let all_matches = query_cursor.matches(&query, tree.root_node(), code.as_bytes());
+    let captures = query_cursor.captures(&query, tree.root_node(), code.as_bytes());
 
-    let mut captured_functions: Vec<String> = Vec::new();
+    let mut captured_elements: Vec<String> = Vec::new();
 
-    for each_match in all_matches {
-        for capture in each_match.captures.iter() {
-            let start_byte = capture.node.start_byte();
-            let end_byte = capture.node.end_byte();
-            let function_text = &code[start_byte..end_byte];
-            captured_functions.push(function_text.to_string());
-        }
+    // dbg!(&query.capture_names()[1]);
+    for (mat, ix) in captures {
+        let capture = &mat.captures[ix];
+        let capture_name = &query.capture_names()[capture.index as usize];
+        let start_byte = capture.node.start_byte();
+        let end_byte = capture.node.end_byte();
+        let element_text = &code[start_byte..end_byte];
+        captured_elements.push(format!("{} - {}", capture_name, element_text));
     }
 
-    captured_functions
+    captured_elements
 }
 
 fn main() {
-    let captured_functions = process_input();
-    for function_text in captured_functions {
-        println!("{}", function_text);
+    let captured_elements = process_input();
+    for element in captured_elements {
+        println!("{}", element);
     }
 }
