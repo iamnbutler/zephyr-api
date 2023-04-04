@@ -1,4 +1,4 @@
-# Zephyr Server
+# Zephyr API
 
 A little api for serving syntax trees.
 
