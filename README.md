@@ -2,6 +2,8 @@
 
 A little api for serving syntax trees.
 
+Will be used to power the Zephyr figma plugin for creating accurate syntax highlighted code blocks with individually selectable nodes.
+
 You can hit the api with a string, and it will return a syntax tree in json format.
 
 Currently only supports rust.
