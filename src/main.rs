@@ -1,4 +1,5 @@
 use serde_derive::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::io::Error;
 use tree_sitter::{Language, Parser, Query, QueryCursor};
@@ -18,8 +19,11 @@ impl Default for Node {
     }
 }
 
-// TODO: When a node matches multiple patterns only keep the last one
-// TODO: Look into injections to correctly highlight macro invocations, etc
+#[derive(Clone, Debug, PartialEq)]
+pub enum QueryRule {
+    FirstWins,
+    LastWins,
+}
 
 /// Takes a string and returns a vector of Nodes.
 ///
@@ -98,6 +102,42 @@ fn process_input(code: &str) -> Vec<Node> {
     captured_elements
 }
 
+/// This function removes duplicate nodes from a vector of nodes.
+///
+/// It is possible for a query to capture the same node multiple times.
+///
+/// When a multiple patterns in the same query capture the same node,
+/// we need to decide which one to keep. There are two options:
+///
+/// 1. First wins: The first pattern to capture the node wins
+/// 2. Last wins: The last pattern to capture the node wins
+///
+/// Currently both are used. Github uses the first wins rule, but
+/// Zed and Neovim use the last wins rule.
+///
+/// For now we'll offer the ability to choose between the two.
+fn resolve_duplicate_nodes(nodes: Vec<Node>, query_rule: QueryRule) -> Vec<Node> {
+    let mut resolved_nodes: Vec<Node> = Vec::new();
+    let mut element_indices: HashMap<String, usize> = HashMap::new();
+
+    for node in nodes.into_iter() {
+        if let Some(index) = element_indices.get(&node.element_text) {
+            match query_rule {
+                QueryRule::FirstWins => continue,
+                QueryRule::LastWins => {
+                    resolved_nodes.remove(*index);
+                }
+            }
+        }
+
+        let new_index = resolved_nodes.len();
+        element_indices.insert(node.element_text.clone(), new_index);
+        resolved_nodes.push(node);
+    }
+
+    resolved_nodes
+}
+
 /// Splits a node with a newline character into multiple nodes
 ///
 /// One with the newline character and the others with the remaining text
@@ -172,7 +212,8 @@ let mut new_nodes: Vec<Node> = Vec::new();
 
 fn main() -> Result<(), Error> {
     let nodes = process_input(STATIC_CODE_TO_HIGHLIGHT);
-    let split_nodes = split_newline_nodes(nodes);
+    let deduplicated_nodes = resolve_duplicate_nodes(nodes, QueryRule::LastWins);
+    let split_nodes = split_newline_nodes(deduplicated_nodes);
     let lines = split_into_lines(split_nodes);
     let lines_json = serde_json::to_string(&lines).unwrap();
 
