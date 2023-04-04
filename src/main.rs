@@ -63,8 +63,49 @@ fn process_input() -> Vec<Node> {
     captured_elements
 }
 
+fn split_newline_nodes(nodes: Vec<Node>) -> Vec<Node> {
+    let mut new_nodes: Vec<Node> = Vec::new();
+
+    for node in nodes {
+        if node.element_text.contains('\n') {
+            let mut remaining_text = node.element_text.clone();
+            let mut start = 0;
+
+            while let Some(pos) = remaining_text.find('\n') {
+                let end = start + pos;
+                if start != end {
+                    new_nodes.push(Node {
+                        node_type: node.node_type.clone(),
+                        element_text: node.element_text[start..end].to_string(),
+                    });
+                }
+
+                new_nodes.push(Node {
+                    node_type: String::from("newline"),
+                    element_text: String::from("\n"),
+                });
+
+                remaining_text = remaining_text[pos + 1..].to_string();
+                start = end + 1;
+            }
+
+            if !remaining_text.is_empty() {
+                new_nodes.push(Node {
+                    node_type: node.node_type,
+                    element_text: remaining_text,
+                });
+            }
+        } else {
+            new_nodes.push(node);
+        }
+    }
+
+    new_nodes
+}
+
 fn main() {
-    let captured_elements = process_input();
-    let json_string = serde_json::to_string(&captured_elements).unwrap();
-    println!("{}", json_string);
+    let nodes = process_input();
+    let split_nodes = split_newline_nodes(nodes);
+    let nodes_json = serde_json::to_string(&split_nodes).unwrap();
+    println!("{}", nodes_json);
 }
