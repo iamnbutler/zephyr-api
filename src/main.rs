@@ -1,5 +1,6 @@
 use serde_derive::{Deserialize, Serialize};
 use std::fs;
+use std::io::Error;
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -22,12 +23,44 @@ fn process_input() -> Vec<Node> {
     let rust_lang: Language = tree_sitter_rust::language();
     parser.set_language(rust_lang).unwrap();
 
-    let code = r#"unsafe {
-    let dst = s.as_mut_ptr().add(range.start);
-    let src = s.as_ptr().add(range.end);
-    let count = range_end - range.end;
-    std::ptr::copy(src, dst, count);
-    println!("{}", s);
+    let code = r#"fn split_newline_nodes(nodes: Vec<Node>) -> Vec<Node> {
+    let mut new_nodes: Vec<Node> = Vec::new();
+
+    for node in nodes {
+        if node.element_text.contains('\n') {
+            let mut remaining_text = node.element_text.clone();
+            let mut start = 0;
+
+            while let Some(pos) = remaining_text.find('\n') {
+                let end = start + pos;
+                if start != end {
+                    new_nodes.push(Node {
+                        node_type: node.node_type.clone(),
+                        element_text: node.element_text[start..end].to_string(),
+                    });
+                }
+
+                new_nodes.push(Node {
+                    node_type: String::from("newline"),
+                    element_text: String::from("\n"),
+                });
+
+                remaining_text = remaining_text[pos + 1..].to_string();
+                start = end + 1;
+            }
+
+            if !remaining_text.is_empty() {
+                new_nodes.push(Node {
+                    node_type: node.node_type,
+                    element_text: remaining_text,
+                });
+            }
+        } else {
+            new_nodes.push(node);
+        }
+    }
+
+    new_nodes
 }"#;
 
     let tree = parser.parse(&code, None).unwrap();
@@ -103,9 +136,34 @@ fn split_newline_nodes(nodes: Vec<Node>) -> Vec<Node> {
     new_nodes
 }
 
-fn main() {
+fn split_into_lines(nodes: Vec<Node>) -> Vec<Vec<Node>> {
+    let mut lines: Vec<Vec<Node>> = Vec::new();
+    let mut current_line: Vec<Node> = Vec::new();
+
+    for node in nodes {
+        if node.node_type == "newline" {
+            lines.push(current_line);
+            current_line = Vec::new();
+        } else {
+            current_line.push(node);
+        }
+    }
+
+    // Push the last line if it's not empty
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    lines
+}
+
+fn main() -> Result<(), Error> {
     let nodes = process_input();
     let split_nodes = split_newline_nodes(nodes);
-    let nodes_json = serde_json::to_string(&split_nodes).unwrap();
-    println!("{}", nodes_json);
+    let lines = split_into_lines(split_nodes);
+    let lines_json = serde_json::to_string(&lines).unwrap();
+
+    fs::write("dist/output.json", lines_json)?;
+    println!("Data written to output.json");
+    Ok(())
 }
