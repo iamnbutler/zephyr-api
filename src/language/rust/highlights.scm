@@ -1,4 +1,5 @@
-; Rust grammar from Zed (https://github.com/zed-industries/zed)
+; Rust query from Zed's internal codebase (https://github.com/zed-industries/zed)
+; Used with permission
 
 (type_identifier) @type
 (primitive_type) @type.builtin

@@ -18,6 +18,9 @@ impl Default for Node {
     }
 }
 
+// TODO: When a node matches multiple patterns only keep the last one
+// TODO: Look into injections to correctly highlight macro invocations, etc
+
 /// Takes a string and returns a vector of Nodes.
 ///
 /// Currently assumes the code is in rust. Later this will become a property.
@@ -75,6 +78,7 @@ fn process_input(code: &str) -> Vec<Node> {
         // Get the text between captures and add it as a node with the node_type "none"
         if start_byte > last_capture_end_byte {
             let text = &code[last_capture_end_byte..start_byte];
+
             // The Default trait already sets the node_type to "none"
             // so we only need to set the element_text
             node.element_text = String::from(text);
@@ -162,9 +166,9 @@ fn split_into_lines(nodes: Vec<Node>) -> Vec<Vec<Node>> {
 }
 
 // Static placeholder code to test process_input
-const STATIC_CODE_TO_HIGHLIGHT: &str = r#"fn split_newline_nodes(nodes: Vec<Node>) -> Vec<Node> {
+const STATIC_CODE_TO_HIGHLIGHT: &str = r#"const STATIC_CODE_TO_HIGHLIGHT: &str = "fn split_newline_nodes(nodes: Vec<Node>) -> Vec<Node> {
 let mut new_nodes: Vec<Node> = Vec::new();
-}"#;
+}";"#;
 
 fn main() -> Result<(), Error> {
     let nodes = process_input(STATIC_CODE_TO_HIGHLIGHT);
