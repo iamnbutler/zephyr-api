@@ -1,3 +1,5 @@
+; Rust grammar from Zed (https://github.com/zed-industries/zed)
+
 (type_identifier) @type
 (primitive_type) @type.builtin
 (self) @variable.special
