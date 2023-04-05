@@ -1,8 +1,9 @@
+use hyper::body;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::io::Error;
 use tree_sitter::{Language, Parser, Query, QueryCursor};
+use vercel_runtime::{run, Body, Error, Request, Response, StatusCode};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Node {
@@ -25,6 +26,11 @@ pub enum QueryRule {
     LastWins,
 }
 
+#[derive(Debug, Deserialize)]
+struct CodeRequest {
+    code: String,
+}
+
 /// Takes a string and returns a vector of Nodes.
 ///
 /// Currently assumes the code is in rust. Later this will become a property.
@@ -37,7 +43,7 @@ pub enum QueryRule {
 ///
 /// The non-captures are converted into Nodes with the node_type "none",
 /// which is used to indicate plain text.
-fn process_input(code: &str) -> Vec<Node> {
+fn process_string(code: &str) -> Vec<Node> {
     let mut parser = Parser::new();
 
     // Hard code rust as the only language for now
@@ -205,19 +211,34 @@ fn split_into_lines(nodes: Vec<Node>) -> Vec<Vec<Node>> {
     lines
 }
 
-// Static placeholder code to test process_input
-const STATIC_CODE_TO_HIGHLIGHT: &str = r#"const STATIC_CODE_TO_HIGHLIGHT: &str = "fn split_newline_nodes(nodes: Vec<Node>) -> Vec<Node> {
-let mut new_nodes: Vec<Node> = Vec::new();
-}";"#;
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    run(handler).await
+}
 
-fn main() -> Result<(), Error> {
-    let nodes = process_input(STATIC_CODE_TO_HIGHLIGHT);
+pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
+    let body_bytes = body::to_bytes(req.into_body()).await.map_err(|_| {
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Failed to read request body",
+        )) as Box<dyn std::error::Error + Send + Sync>
+    })?;
+    let request: CodeRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(request) => request,
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("Invalid JSON payload".into())?)
+        }
+    };
+
+    let nodes = process_string(&request.code);
     let deduplicated_nodes = resolve_duplicate_nodes(nodes, QueryRule::LastWins);
     let split_nodes = split_newline_nodes(deduplicated_nodes);
     let lines = split_into_lines(split_nodes);
-    let lines_json = serde_json::to_string(&lines).unwrap();
 
-    fs::write("dist/output.json", lines_json)?;
-    println!("Data written to output.json");
-    Ok(())
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&lines)?.into())?)
 }
