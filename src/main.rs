@@ -1,7 +1,8 @@
+use actix_web::web::JsonConfig;
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::io::Error;
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -25,6 +26,11 @@ pub enum QueryRule {
     LastWins,
 }
 
+#[derive(Debug, Deserialize)]
+struct CodeRequest {
+    code: String,
+}
+
 /// Takes a string and returns a vector of Nodes.
 ///
 /// Currently assumes the code is in rust. Later this will become a property.
@@ -37,7 +43,7 @@ pub enum QueryRule {
 ///
 /// The non-captures are converted into Nodes with the node_type "none",
 /// which is used to indicate plain text.
-fn process_input(code: &str) -> Vec<Node> {
+fn process_string(code: &str) -> Vec<Node> {
     let mut parser = Parser::new();
 
     // Hard code rust as the only language for now
@@ -205,19 +211,27 @@ fn split_into_lines(nodes: Vec<Node>) -> Vec<Vec<Node>> {
     lines
 }
 
-// Static placeholder code to test process_input
-const STATIC_CODE_TO_HIGHLIGHT: &str = r#"const STATIC_CODE_TO_HIGHLIGHT: &str = "fn split_newline_nodes(nodes: Vec<Node>) -> Vec<Node> {
-let mut new_nodes: Vec<Node> = Vec::new();
-}";"#;
-
-fn main() -> Result<(), Error> {
-    let nodes = process_input(STATIC_CODE_TO_HIGHLIGHT);
+async fn highlight_code(request: web::Json<CodeRequest>) -> impl Responder {
+    let nodes = process_string(&request.code);
     let deduplicated_nodes = resolve_duplicate_nodes(nodes, QueryRule::LastWins);
     let split_nodes = split_newline_nodes(deduplicated_nodes);
     let lines = split_into_lines(split_nodes);
-    let lines_json = serde_json::to_string(&lines).unwrap();
+    HttpResponse::Ok().json(lines)
+}
 
-    fs::write("dist/output.json", lines_json)?;
-    println!("Data written to output.json");
-    Ok(())
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    let bind_address = "127.0.0.1:8000";
+
+    println!("Starting server at {}", bind_address);
+    HttpServer::new(|| {
+        App::new().service(
+            web::resource("/highlight")
+                .route(web::post().to(highlight_code))
+                .app_data(JsonConfig::default().limit(4096)),
+        )
+    })
+    .bind(bind_address)?
+    .run()
+    .await
 }
