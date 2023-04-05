@@ -1,7 +1,6 @@
 use hyper::body;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
 use tree_sitter::{Language, Parser, Query, QueryCursor};
 use vercel_runtime::{run, Body, Error, Request, Response, StatusCode};
 
@@ -53,8 +52,9 @@ fn process_string(code: &str) -> Vec<Node> {
     let tree = parser.parse(&code, None).unwrap();
 
     // Load the query from /language/* (static until support for multiple languages is added)
-    let query_string = fs::read_to_string("../language/rust/highlights.scm")
-        .expect("Failed to read the highlight.scm file");
+
+    // Use the include_str! macro to include the file content in the binary
+    let query_string = include_str!("../language/rust/highlights.scm");
 
     let query = Query::new(rust_lang, &query_string).unwrap();
 
