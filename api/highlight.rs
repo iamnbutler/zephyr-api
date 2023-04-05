@@ -53,7 +53,7 @@ fn process_string(code: &str) -> Vec<Node> {
     let tree = parser.parse(&code, None).unwrap();
 
     // Load the query from /language/* (static until support for multiple languages is added)
-    let query_string = fs::read_to_string("/language/rust/highlights.scm")
+    let query_string = fs::read_to_string("../language/rust/highlights.scm")
         .expect("Failed to read the highlight.scm file");
 
     let query = Query::new(rust_lang, &query_string).unwrap();
