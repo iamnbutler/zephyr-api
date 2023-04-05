@@ -18,4 +18,4 @@ hyper = "0.14.25"
 
 [[bin]]
 name = "handler"
-path = "api/handler.rs"
+path = "api/highlight.rs"
