@@ -1,9 +1,9 @@
-use actix_web::web::JsonConfig;
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use hyper::body;
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use tree_sitter::{Language, Parser, Query, QueryCursor};
+use vercel_runtime::{run, Body, Error, Request, Response, StatusCode};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Node {
@@ -211,27 +211,34 @@ fn split_into_lines(nodes: Vec<Node>) -> Vec<Vec<Node>> {
     lines
 }
 
-async fn highlight_code(request: web::Json<CodeRequest>) -> impl Responder {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    run(handler).await
+}
+
+pub async fn handler(req: Request) -> Result<Response<Body>, Error> {
+    let body_bytes = body::to_bytes(req.into_body()).await.map_err(|_| {
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Failed to read request body",
+        )) as Box<dyn std::error::Error + Send + Sync>
+    })?;
+    let request: CodeRequest = match serde_json::from_slice(&body_bytes) {
+        Ok(request) => request,
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("Invalid JSON payload".into())?)
+        }
+    };
+
     let nodes = process_string(&request.code);
     let deduplicated_nodes = resolve_duplicate_nodes(nodes, QueryRule::LastWins);
     let split_nodes = split_newline_nodes(deduplicated_nodes);
     let lines = split_into_lines(split_nodes);
-    HttpResponse::Ok().json(lines)
-}
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    let bind_address = "127.0.0.1:8000";
-
-    println!("Starting server at {}", bind_address);
-    HttpServer::new(|| {
-        App::new().service(
-            web::resource("/highlight")
-                .route(web::post().to(highlight_code))
-                .app_data(JsonConfig::default().limit(4096)),
-        )
-    })
-    .bind(bind_address)?
-    .run()
-    .await
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&lines)?.into())?)
 }
